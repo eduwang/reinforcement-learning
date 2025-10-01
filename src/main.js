@@ -250,6 +250,10 @@ class CartPoleApp {
           </div>
         </div>
       </div>
+      
+      <footer class="footer">
+        <p>Made by <strong>Hyowon Wang</strong></p>
+      </footer>
     `;
   }
   
