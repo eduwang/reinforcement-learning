@@ -3,6 +3,7 @@ import { CartPole } from './cartpole.js'
 import { DQN } from './dqn.js'
 import { Maze } from './maze.js'
 import { QLearning } from './qlearning.js'
+import { LunarLander } from './lunarlander.js'
 
 class CartPoleApp {
   constructor() {
@@ -26,6 +27,16 @@ class CartPoleApp {
     this.mazeChartData = [];
     this.mazeSpeed = 5; // 기본 속도 x5
     
+    // Lunar Lander 관련 변수
+    this.landerEnv = new LunarLander();
+    this.landerAgent = null;
+    this.isLanderTraining = false;
+    this.landerEpisode = 0;
+    this.landerScores = [];
+    this.currentLanderScore = 0;
+    this.landerChartData = [];
+    this.landerSpeed = 5; // 기본 속도 x5
+    
     this.initializeUI();
     this.setupEventListeners();
   }
@@ -40,8 +51,18 @@ class CartPoleApp {
         
         <div class="tab-container">
           <div class="tab-buttons">
-            <button class="tab-button active" data-tab="cartpole">🎯 CartPole (DQN)</button>
-            <button class="tab-button" data-tab="maze">🏃 미로 찾기 (Q-Learning)</button>
+            <button class="tab-button active" data-tab="cartpole">
+              🎯 CartPole (DQN)
+              <span class="tab-info-icon" data-tooltip="막대기를 카트 위에 균형있게 세우는 고전적인 제어 문제입니다.&#10;&#10;🎯 목표: 막대가 넘어지지 않도록 카트를 좌우로 움직이기&#10;&#10;📈 학습 과정:&#10;• 0-50 에피소드: 경험 수집 (짧은 점수)&#10;• 50-150 에피소드: 점진적 개선&#10;• 150+ 에피소드: 안정적인 고득점&#10;&#10;💡 알고리즘: Deep Q-Network (DQN)">ℹ️</span>
+            </button>
+            <button class="tab-button" data-tab="maze">
+              🏃 미로 찾기 (Q-Learning)
+              <span class="tab-info-icon" data-tooltip="에이전트가 미로를 탐험하여 최단 경로를 찾는 문제입니다.&#10;&#10;🎯 목표: 시작점(S)에서 목표점(G)까지 최단 경로 찾기&#10;&#10;📈 학습 과정:&#10;• 0-50 에피소드: 랜덤 탐험 (많은 스텝)&#10;• 50-200 에피소드: 경로 학습 중&#10;• 200+ 에피소드: 최적 경로 수렴&#10;&#10;💡 알고리즘: Q-Learning (테이블 기반)">ℹ️</span>
+            </button>
+            <button class="tab-button" data-tab="lander">
+              🚀 Lunar Lander (DQN)
+              <span class="tab-info-icon" data-tooltip="우주선을 착륙 패드에 안전하게 착륙시키는 문제입니다.&#10;&#10;🎯 목표: 적절한 속도와 각도로 착륙 패드에 착륙하기&#10;&#10;📈 학습 과정:&#10;• 0-100 에피소드: 대부분 추락 (음수 점수)&#10;• 100-300 에피소드: 착륙 시도 시작&#10;• 300-500 에피소드: 가끔 성공&#10;• 500+ 에피소드: 안정적인 착륙 (100점+)&#10;&#10;💡 알고리즘: Deep Q-Network (DQN)">ℹ️</span>
+            </button>
           </div>
           
           <!-- CartPole Tab -->
@@ -62,10 +83,10 @@ class CartPoleApp {
                   <div class="setting-group">
                     <label for="epsilon">
                       탐험률 (Epsilon)
-                      <span class="info-icon" data-tooltip="에이전트가 랜덤 행동을 선택할 확률입니다.&#10;&#10;• 높으면: 더 많은 탐험 (새로운 전략 시도)&#10;• 낮으면: 더 많은 활용 (학습된 전략 사용)&#10;&#10;학습 초기에는 1.0에서 시작하여 점차 감소합니다.">ℹ️</span>
+                      <span class="info-icon" data-tooltip="에이전트가 랜덤 행동을 선택할 확률입니다.&#10;&#10;• 높으면: 더 많은 탐험 (새로운 전략 시도)&#10;• 낮으면: 더 많은 활용 (학습된 전략 사용)&#10;&#10;학습 초기에는 0.99에서 시작하여 점차 감소합니다.">ℹ️</span>
                     </label>
-                    <input type="range" id="epsilon" min="0.01" max="1.0" step="0.01" value="1.0">
-                    <span id="epsilonValue">1.0</span>
+                    <input type="range" id="epsilon" min="0.01" max="1.0" step="0.01" value="0.99">
+                    <span id="epsilonValue">0.99</span>
                   </div>
                   
                   <div class="setting-group">
@@ -241,6 +262,95 @@ class CartPoleApp {
               </div>
             </div>
           </div>
+          
+          <!-- Lunar Lander Tab -->
+          <div id="lander-tab" class="tab-content">
+            <div class="main-content">
+              <div class="control-panel">
+                <h3>Lunar Lander 실험 설정</h3>
+                <div class="settings-grid">
+                  <div class="setting-group">
+                    <label for="landerLearningRate">
+                      학습률 (Learning Rate)
+                      <span class="info-icon" data-tooltip="신경망이 얼마나 빠르게 학습할지 결정합니다.&#10;&#10;• 높으면: 빠른 학습, 하지만 불안정할 수 있음&#10;• 낮으면: 느린 학습, 하지만 안정적&#10;&#10;권장값: 0.0005">ℹ️</span>
+                    </label>
+                    <input type="range" id="landerLearningRate" min="0.0001" max="0.01" step="0.0001" value="0.0005">
+                    <span id="landerLearningRateValue">0.0005</span>
+                  </div>
+                  
+                  <div class="setting-group">
+                    <label for="landerEpsilon">
+                      탐험률 (Epsilon)
+                      <span class="info-icon" data-tooltip="에이전트가 랜덤 행동을 선택할 확률입니다.&#10;&#10;• 높으면: 더 많은 탐험&#10;• 낮으면: 더 많은 활용&#10;&#10;0.99에서 시작하여 점차 감소합니다.">ℹ️</span>
+                    </label>
+                    <input type="range" id="landerEpsilon" min="0.01" max="1.0" step="0.01" value="0.99">
+                    <span id="landerEpsilonValue">0.99</span>
+                  </div>
+                  
+                  <div class="setting-group">
+                    <label for="landerGamma">
+                      할인율 (Gamma)
+                      <span class="info-icon" data-tooltip="미래 보상을 얼마나 중요하게 볼지 결정합니다.&#10;&#10;• 높으면: 장기적 보상 중시&#10;• 낮으면: 즉각적 보상 중시&#10;&#10;권장값: 0.99">ℹ️</span>
+                    </label>
+                    <input type="range" id="landerGamma" min="0.8" max="0.99" step="0.01" value="0.99">
+                    <span id="landerGammaValue">0.99</span>
+                  </div>
+                  
+                  <div class="setting-group">
+                    <label for="landerHiddenSize">은닉층 크기:</label>
+                    <select id="landerHiddenSize">
+                      <option value="64">64</option>
+                      <option value="128" selected>128</option>
+                      <option value="256">256</option>
+                    </select>
+                  </div>
+                  
+                  <div class="setting-group full-width">
+                    <label>학습 속도:</label>
+                    <div class="speed-buttons">
+                      <button class="lander-speed-btn" data-speed="1">x1</button>
+                      <button class="lander-speed-btn" data-speed="3">x3</button>
+                      <button class="lander-speed-btn active" data-speed="5">x5</button>
+                      <button class="lander-speed-btn" data-speed="10">x10</button>
+                      <button class="lander-speed-btn" data-speed="max">MAX</button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="control-buttons">
+                  <button id="startLanderTraining" class="btn btn-primary">학습 시작</button>
+                  <button id="stopLanderTraining" class="btn btn-danger" disabled>학습 중지</button>
+                  <button id="resetLanderAgent" class="btn btn-secondary">에이전트 초기화</button>
+                </div>
+              </div>
+              
+              <div class="visualization-panel">
+                <div class="game-container">
+                  <h3>Lunar Lander 게임</h3>
+                  <canvas id="landerCanvas" width="400" height="300"></canvas>
+                  <div class="game-info">
+                    <div>에피소드: <span id="landerEpisodeCount">0</span></div>
+                    <div>현재 점수: <span id="landerCurrentScore">0</span></div>
+                    <div>평균 점수: <span id="landerAverageScore">0</span></div>
+                    <div>최고 점수: <span id="landerBestScore">0</span></div>
+                    <div>탐험률 (ε): <span id="landerEpsilonCurrent">1.00</span></div>
+                    <div>성공률: <span id="landerSuccessRate">0%</span></div>
+                  </div>
+                </div>
+                
+                <div class="charts-container">
+                  <div class="chart-section">
+                    <h3>학습 진행 상황</h3>
+                    <canvas id="landerChart" width="400" height="200"></canvas>
+                    <div class="chart-info">
+                      <p class="chart-label">📊 <strong>Y축:</strong> 에피소드 점수 (높을수록 좋음)</p>
+                      <p class="chart-description">안전하게 착륙할수록 높은 점수. 100점 이상이면 성공적인 착륙입니다! 🚀</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div class="status-panel">
@@ -334,9 +444,37 @@ class CartPoleApp {
     document.getElementById('resetMazeAgent').addEventListener('click', () => this.resetMazeAgent());
     document.getElementById('generateNewMaze').addEventListener('click', () => this.generateNewMaze());
     
+    // Lunar Lander 슬라이더 값 업데이트
+    document.getElementById('landerLearningRate').addEventListener('input', (e) => {
+      document.getElementById('landerLearningRateValue').textContent = e.target.value;
+    });
+    
+    document.getElementById('landerEpsilon').addEventListener('input', (e) => {
+      document.getElementById('landerEpsilonValue').textContent = e.target.value;
+    });
+    
+    document.getElementById('landerGamma').addEventListener('input', (e) => {
+      document.getElementById('landerGammaValue').textContent = e.target.value;
+    });
+    
+    // Lunar Lander 속도 버튼 이벤트
+    document.querySelectorAll('.lander-speed-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.lander-speed-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        this.landerSpeed = e.target.dataset.speed;
+      });
+    });
+    
+    // Lunar Lander 버튼 이벤트
+    document.getElementById('startLanderTraining').addEventListener('click', () => this.startLanderTraining());
+    document.getElementById('stopLanderTraining').addEventListener('click', () => this.stopLanderTraining());
+    document.getElementById('resetLanderAgent').addEventListener('click', () => this.resetLanderAgent());
+    
     // 차트 초기화
     this.initializeChart();
     this.initializeMazeChart();
+    this.initializeLanderChart();
     
     // 초기 미로 렌더링 (DOM이 완전히 로드된 후)
     setTimeout(() => {
@@ -644,6 +782,12 @@ class CartPoleApp {
       document.getElementById('statusText').textContent = 'CartPole 탭이 선택되었습니다.';
     } else if (tabName === 'maze') {
       document.getElementById('statusText').textContent = '미로 찾기 탭이 선택되었습니다.';
+    } else if (tabName === 'lander') {
+      document.getElementById('statusText').textContent = 'Lunar Lander 탭이 선택되었습니다.';
+      // Lunar Lander 초기 렌더링
+      setTimeout(() => {
+        this.renderLander();
+      }, 100);
     }
   }
   
@@ -905,6 +1049,223 @@ class CartPoleApp {
     
     // 진행률 업데이트
     const progress = Math.min(this.mazeEpisode / 1000, 1);
+    document.getElementById('progressFill').style.width = `${progress * 100}%`;
+  }
+  
+  // Lunar Lander 관련 메서드들
+  initializeLanderChart() {
+    const canvas = document.getElementById('landerChart');
+    const ctx = canvas.getContext('2d');
+    
+    this.landerChartCtx = ctx;
+    this.landerChartData = [];
+    this.drawLanderChart();
+  }
+  
+  drawLanderChart() {
+    const ctx = this.landerChartCtx;
+    const canvas = document.getElementById('landerChart');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    ctx.clearRect(0, 0, width, height);
+    
+    if (this.landerChartData.length === 0) return;
+    
+    const maxScore = Math.max(...this.landerChartData, 0);
+    const minScore = Math.min(...this.landerChartData, -100);
+    const range = maxScore - minScore || 1;
+    
+    ctx.strokeStyle = '#FF6B6B';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    this.landerChartData.forEach((score, index) => {
+      const x = (index / (this.landerChartData.length - 1)) * width;
+      const y = height - ((score - minScore) / range) * height;
+      
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    
+    ctx.stroke();
+    
+    // 0점 기준선
+    const zeroY = height - ((0 - minScore) / range) * height;
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, zeroY);
+    ctx.lineTo(width, zeroY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  
+  startLanderTraining() {
+    if (this.isLanderTraining) return;
+    
+    const learningRate = parseFloat(document.getElementById('landerLearningRate').value);
+    const epsilon = parseFloat(document.getElementById('landerEpsilon').value);
+    const gamma = parseFloat(document.getElementById('landerGamma').value);
+    const hiddenSize = parseInt(document.getElementById('landerHiddenSize').value);
+    
+    this.landerAgent = new DQN(8, hiddenSize, 4, learningRate);
+    this.landerAgent.epsilon = epsilon;
+    this.landerAgent.gamma = gamma;
+    this.landerAgent.rewardScale = 0.1; // Lunar Lander는 더 큰 보상 스케일 사용
+    
+    this.isLanderTraining = true;
+    this.landerEpisode = 0;
+    this.landerScores = [];
+    this.landerChartData = [];
+    this.landerSuccesses = 0;
+    
+    document.getElementById('startLanderTraining').disabled = true;
+    document.getElementById('stopLanderTraining').disabled = false;
+    document.getElementById('statusText').textContent = 'Lunar Lander 학습 중...';
+    
+    this.landerTrainingLoop();
+  }
+  
+  stopLanderTraining() {
+    this.isLanderTraining = false;
+    
+    document.getElementById('startLanderTraining').disabled = false;
+    document.getElementById('stopLanderTraining').disabled = true;
+    document.getElementById('statusText').textContent = 'Lunar Lander 학습이 중지되었습니다.';
+  }
+  
+  resetLanderAgent() {
+    this.landerAgent = null;
+    this.landerEpisode = 0;
+    this.landerScores = [];
+    this.currentLanderScore = 0;
+    this.landerSuccesses = 0;
+    
+    document.getElementById('landerEpisodeCount').textContent = '0';
+    document.getElementById('landerCurrentScore').textContent = '0';
+    document.getElementById('landerAverageScore').textContent = '0';
+    document.getElementById('landerBestScore').textContent = '0';
+    document.getElementById('landerSuccessRate').textContent = '0%';
+    
+    this.landerChartData = [];
+    this.drawLanderChart();
+    
+    document.getElementById('statusText').textContent = 'Lunar Lander 에이전트가 초기화되었습니다.';
+  }
+  
+  async landerTrainingLoop() {
+    while (this.isLanderTraining) {
+      await this.runLanderEpisode();
+      
+      // UI 업데이트
+      this.updateLanderUI();
+      
+      // 차트 업데이트
+      this.drawLanderChart();
+      
+      // 속도에 따른 대기 시간
+      if (this.landerSpeed === 'max') {
+        if (this.landerEpisode % 10 === 0) {
+          await this.sleep(10);
+        }
+      } else {
+        const speedMultiplier = parseFloat(this.landerSpeed);
+        if (this.landerEpisode % 10 === 0) {
+          await this.sleep(100 / speedMultiplier);
+        }
+      }
+    }
+  }
+  
+  async runLanderEpisode() {
+    let state = this.landerEnv.reset();
+    let done = false;
+    let score = 0;
+    let stepCount = 0;
+    let lastInfo = {}; // 마지막 info를 저장할 변수
+    
+    while (!done && this.isLanderTraining) {
+      // 액션 선택
+      const action = this.landerAgent.act(state);
+      
+      // 환경에서 스텝 실행
+      const [nextState, reward, episodeDone, info] = this.landerEnv.step(action);
+      
+      // 경험 저장
+      this.landerAgent.remember(state, action, reward, nextState, episodeDone);
+      
+      // 학습
+      this.landerAgent.replay();
+      
+      state = nextState;
+      score += reward;
+      done = episodeDone;
+      lastInfo = info; // 마지막 info 저장
+      stepCount++;
+      
+      // 렌더링 및 딜레이 (속도에 따라 조절)
+      if (this.landerSpeed === 'max') {
+        if (stepCount % 5 === 0) {
+          this.renderLander();
+        }
+        await this.sleep(0);
+      } else {
+        this.renderLander();
+        const speedMultiplier = parseFloat(this.landerSpeed);
+        await this.sleep(30 / speedMultiplier);
+      }
+    }
+    
+    // 성공 여부 기록
+    if (lastInfo.success) {
+      this.landerSuccesses++;
+    }
+    
+    this.landerEpisode++;
+    this.landerScores.push(score);
+    this.currentLanderScore = score;
+    
+    // 차트 데이터 업데이트 (최근 100개 에피소드만)
+    this.landerChartData.push(score);
+    if (this.landerChartData.length > 100) {
+      this.landerChartData.shift();
+    }
+  }
+  
+  renderLander() {
+    const canvas = document.getElementById('landerCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    this.landerEnv.render(canvas, ctx);
+  }
+  
+  updateLanderUI() {
+    document.getElementById('landerEpisodeCount').textContent = this.landerEpisode;
+    document.getElementById('landerCurrentScore').textContent = this.currentLanderScore.toFixed(1);
+    
+    if (this.landerScores.length > 0) {
+      const avgScore = this.landerScores.reduce((a, b) => a + b, 0) / this.landerScores.length;
+      const bestScore = Math.max(...this.landerScores);
+      const successRate = (this.landerSuccesses / this.landerScores.length * 100).toFixed(1);
+      
+      document.getElementById('landerAverageScore').textContent = avgScore.toFixed(1);
+      document.getElementById('landerBestScore').textContent = bestScore.toFixed(1);
+      document.getElementById('landerSuccessRate').textContent = `${successRate}%`;
+    }
+    
+    // 탐험률 정보
+    if (this.landerAgent) {
+      document.getElementById('landerEpsilonCurrent').textContent = this.landerAgent.epsilon.toFixed(3);
+    }
+    
+    // 진행률 업데이트
+    const progress = Math.min(this.landerEpisode / 1000, 1);
     document.getElementById('progressFill').style.width = `${progress * 100}%`;
   }
 }

@@ -22,14 +22,14 @@ export class DQN {
     this.memory = [];
     this.memorySize = 10000;
     this.batchSize = 32; // 배치 크기
-    this.minMemorySize = 500; // 최소 메모리 크기 (더 빨리 학습 시작)
+    this.minMemorySize = 1000; // 최소 메모리 크기 (더 빨리 학습 시작)
     
     // 하이퍼파라미터
     this.epsilon = 1.0;
     this.epsilonMin = 0.05; // 최소 탐험률을 높게 유지
     this.epsilonDecay = 0.998; // 더 천천히 감소 (0.995 -> 0.998)
     this.gamma = 0.99; // 할인율 증가 (장기 보상 중시)
-    this.updateTargetFreq = 20; // 타겟 네트워크 업데이트 빈도
+    this.updateTargetFreq = 1000; // 타겟 네트워크 업데이트 빈도
     this.stepCount = 0;
     this.trainingStep = 0;
     

@@ -63,6 +63,11 @@ header p {
   cursor: pointer;
   transition: all 0.3s ease;
   border-bottom: 3px solid transparent;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .tab-button:hover {
@@ -74,6 +79,108 @@ header p {
   background: white;
   color: #667eea;
   border-bottom-color: #667eea;
+}
+
+/* 탭 버튼 내 툴팁 아이콘 */
+.tab-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: help;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  z-index: 1; /* 기본 z-index */
+}
+
+.tab-info-icon:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
+  z-index: 100000; /* 호버 시 최상위 */
+}
+
+
+/* 탭 툴팁 내용 - 기본 스타일 */
+.tab-info-icon::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 15px);
+  background: #2d3748;
+  color: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: normal;
+  line-height: 1.7;
+  white-space: pre-line;
+  min-width: 320px;
+  max-width: 380px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s ease;
+  z-index: 99999;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* CartPole - 오른쪽 아래 */
+.tab-button[data-tab="cartpole"] .tab-info-icon::after {
+  left: 0;
+  transform: translateX(0);
+}
+
+.tab-button[data-tab="cartpole"] .tab-info-icon::before {
+  left: 20px;
+}
+
+/* 미로 찾기 - 중앙 아래 */
+.tab-button[data-tab="maze"] .tab-info-icon::after {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tab-button[data-tab="maze"] .tab-info-icon::before {
+  left: 50%;
+}
+
+/* Lunar Lander - 왼쪽 아래 */
+.tab-button[data-tab="lander"] .tab-info-icon::after {
+  right: 0;
+  left: auto;
+  transform: translateX(0);
+}
+
+.tab-button[data-tab="lander"] .tab-info-icon::before {
+  right: 20px;
+  left: auto;
+}
+
+/* 탭 툴팁 화살표 */
+.tab-info-icon::before {
+  content: '';
+  position: absolute;
+  top: calc(100% + 9px);
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: #2d3748;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s ease;
+  z-index: 100000;
+}
+
+/* 탭 호버 시 툴팁 표시 */
+.tab-info-icon:hover::after,
+.tab-info-icon:hover::before {
+  opacity: 1;
 }
 
 .tab-content {
@@ -263,7 +370,8 @@ header p {
 }
 
 .speed-btn,
-.cartpole-speed-btn {
+.cartpole-speed-btn,
+.lander-speed-btn {
   flex: 1;
   min-width: 50px;
   padding: 10px 15px;
@@ -284,14 +392,16 @@ header p {
 }
 
 .speed-btn:hover,
-.cartpole-speed-btn:hover {
+.cartpole-speed-btn:hover,
+.lander-speed-btn:hover {
   background: #f7fafc;
   border-color: #667eea;
   transform: translateY(-2px);
 }
 
 .speed-btn.active,
-.cartpole-speed-btn.active {
+.cartpole-speed-btn.active,
+.lander-speed-btn.active {
   background: linear-gradient(135deg, #667eea, #764ba2);
   color: white;
   border-color: #667eea;
@@ -299,7 +409,8 @@ header p {
 }
 
 .speed-btn:active,
-.cartpole-speed-btn:active {
+.cartpole-speed-btn:active,
+.lander-speed-btn:active {
   transform: translateY(0);
 }
 
