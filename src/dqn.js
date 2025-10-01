@@ -21,15 +21,20 @@ export class DQN {
     // 경험 리플레이 버퍼
     this.memory = [];
     this.memorySize = 10000;
-    this.batchSize = 32;
+    this.batchSize = 32; // 배치 크기
+    this.minMemorySize = 500; // 최소 메모리 크기 (더 빨리 학습 시작)
     
     // 하이퍼파라미터
     this.epsilon = 1.0;
-    this.epsilonMin = 0.01;
-    this.epsilonDecay = 0.995;
-    this.gamma = 0.95;
-    this.updateTargetFreq = 100;
+    this.epsilonMin = 0.05; // 최소 탐험률을 높게 유지
+    this.epsilonDecay = 0.998; // 더 천천히 감소 (0.995 -> 0.998)
+    this.gamma = 0.99; // 할인율 증가 (장기 보상 중시)
+    this.updateTargetFreq = 20; // 타겟 네트워크 업데이트 빈도
     this.stepCount = 0;
+    this.trainingStep = 0;
+    
+    // 학습 안정성을 위한 추가 파라미터
+    this.rewardScale = 0.01; // 보상 스케일링 (1.0 -> 0.01)
   }
   
   initializeWeights(rows, cols) {
@@ -100,14 +105,17 @@ export class DQN {
   }
   
   remember(state, action, reward, nextState, done) {
-    this.memory.push({ state, action, reward, nextState, done });
+    // 보상 스케일링으로 학습 안정화 (큰 보상 값을 작게 만듦)
+    const scaledReward = reward * this.rewardScale;
+    this.memory.push({ state, action, reward: scaledReward, nextState, done });
     if (this.memory.length > this.memorySize) {
       this.memory.shift();
     }
   }
   
   replay() {
-    if (this.memory.length < this.batchSize) {
+    // 충분한 경험이 쌓일 때까지 학습하지 않음
+    if (this.memory.length < this.minMemorySize) {
       return;
     }
     
@@ -121,7 +129,7 @@ export class DQN {
     // 현재 Q 값들
     const currentQValues = states.map(state => this.predict(state));
     
-    // 타겟 Q 값들
+    // 타겟 Q 값들 (타겟 네트워크 사용)
     const targetQValues = nextStates.map(nextState => {
       const result = this.forward(nextState, true);
       return Math.max(...result.output);
@@ -129,7 +137,7 @@ export class DQN {
     
     // 타겟 계산
     const targets = [];
-    for (let i = 0; i < this.batchSize; i++) {
+    for (let i = 0; i < batch.length; i++) {
       const target = rewards[i] + (dones[i] ? 0 : this.gamma * targetQValues[i]);
       const currentTarget = [...currentQValues[i]];
       currentTarget[actions[i]] = target;
@@ -139,12 +147,14 @@ export class DQN {
     // 역전파
     this.backward(states, targets);
     
-    // Epsilon 감소
-    if (this.epsilon > this.epsilonMin) {
+    this.trainingStep++;
+    
+    // Epsilon 감소 (학습이 시작된 후에만)
+    if (this.trainingStep > 100 && this.epsilon > this.epsilonMin) {
       this.epsilon *= this.epsilonDecay;
     }
     
-    // 타겟 네트워크 업데이트
+    // 타겟 네트워크 업데이트 (Soft Update)
     this.stepCount++;
     if (this.stepCount % this.updateTargetFreq === 0) {
       this.updateTargetNetwork();
@@ -161,8 +171,15 @@ export class DQN {
   }
   
   backward(states, targets) {
-    // 간단한 경사 하강법 구현
-    const learningRate = this.learningRate;
+    // 배치 평균을 사용한 경사 하강법
+    const learningRate = this.learningRate; // 학습률
+    const gradientClipValue = 10.0; // 그래디언트 클리핑 (더 여유롭게)
+    
+    // 그래디언트 누적을 위한 배열 초기화
+    const gradWeights2 = Array(this.hiddenSize).fill(0).map(() => Array(this.outputSize).fill(0));
+    const gradBias2 = Array(this.outputSize).fill(0);
+    const gradWeights1 = Array(this.inputSize).fill(0).map(() => Array(this.hiddenSize).fill(0));
+    const gradBias1 = Array(this.hiddenSize).fill(0);
     
     for (let batchIdx = 0; batchIdx < states.length; batchIdx++) {
       const state = states[batchIdx];
@@ -188,29 +205,57 @@ export class DQN {
         hiddenGradients[i] = sum * this.reluDerivative(hidden[i]);
       }
       
-      // Update weights2
+      // 그래디언트 누적
       for (let i = 0; i < this.hiddenSize; i++) {
         for (let j = 0; j < this.outputSize; j++) {
-          this.weights2[i][j] -= learningRate * outputGradients[j] * hidden[i];
+          gradWeights2[i][j] += outputGradients[j] * hidden[i];
         }
       }
       
-      // Update bias2
       for (let i = 0; i < this.outputSize; i++) {
-        this.bias2[i] -= learningRate * outputGradients[i];
+        gradBias2[i] += outputGradients[i];
       }
       
-      // Update weights1
       for (let i = 0; i < this.inputSize; i++) {
         for (let j = 0; j < this.hiddenSize; j++) {
-          this.weights1[i][j] -= learningRate * hiddenGradients[j] * state[i];
+          gradWeights1[i][j] += hiddenGradients[j] * state[i];
         }
       }
       
-      // Update bias1
       for (let i = 0; i < this.hiddenSize; i++) {
-        this.bias1[i] -= learningRate * hiddenGradients[i];
+        gradBias1[i] += hiddenGradients[i];
       }
+    }
+    
+    // 그래디언트 클리핑 및 가중치 업데이트 (배치 평균 사용)
+    const batchSize = states.length;
+    
+    for (let i = 0; i < this.hiddenSize; i++) {
+      for (let j = 0; j < this.outputSize; j++) {
+        const avgGrad = gradWeights2[i][j] / batchSize;
+        const grad = Math.max(-gradientClipValue, Math.min(gradientClipValue, avgGrad));
+        this.weights2[i][j] -= learningRate * grad;
+      }
+    }
+    
+    for (let i = 0; i < this.outputSize; i++) {
+      const avgGrad = gradBias2[i] / batchSize;
+      const grad = Math.max(-gradientClipValue, Math.min(gradientClipValue, avgGrad));
+      this.bias2[i] -= learningRate * grad;
+    }
+    
+    for (let i = 0; i < this.inputSize; i++) {
+      for (let j = 0; j < this.hiddenSize; j++) {
+        const avgGrad = gradWeights1[i][j] / batchSize;
+        const grad = Math.max(-gradientClipValue, Math.min(gradientClipValue, avgGrad));
+        this.weights1[i][j] -= learningRate * grad;
+      }
+    }
+    
+    for (let i = 0; i < this.hiddenSize; i++) {
+      const avgGrad = gradBias1[i] / batchSize;
+      const grad = Math.max(-gradientClipValue, Math.min(gradientClipValue, avgGrad));
+      this.bias1[i] -= learningRate * grad;
     }
   }
   
